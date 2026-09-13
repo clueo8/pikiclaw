@@ -486,6 +486,68 @@ export function normalizeClaudeModelId(model: unknown): string {
   return typeof model === 'string' ? model.trim() : '';
 }
 
+export function normalizeAgyModelId(model: unknown): string {
+  const m = typeof model === 'string' ? model.trim().toLowerCase() : '';
+  if (!m || m === 'auto' || m === 'auto-gemini-3' || m === 'auto-gemini-2.5' || m === 'gemini-auto') {
+    return 'gemini-3.8-flash-high';
+  }
+  if (m === 'pro' || m === 'gemini-pro' || m === 'gemini-2.5-pro' || m === 'gemini-3-pro-preview' || m === 'gemini-3.1-pro-preview') {
+    return 'gemini-3.1-pro-high';
+  }
+  if (m === 'flash' || m === 'gemini-flash' || m === 'gemini-2.5-flash' || m === 'gemini-3-flash-preview') {
+    return 'gemini-3.8-flash-high';
+  }
+  if (m === 'flash-lite' || m === 'gemini-2.5-flash-lite' || m === 'gemini-3.1-flash-lite-preview') {
+    return 'gemini-3.6-flash-high';
+  }
+  return typeof model === 'string' ? model.trim() : '';
+}
+
+export function resolveAgyModelAndEffort(
+  rawModel?: string | null,
+  rawEffort?: string | null
+): { model: string; effort: string | null } {
+  let model = normalizeAgyModelId(rawModel || '');
+  let effort = (rawEffort || '').trim().toLowerCase();
+
+  // Claude models do not accept --effort in agy
+  if (model.startsWith('claude-')) {
+    return { model, effort: null };
+  }
+
+  // Extract embedded effort if present in the model name (e.g. gemini-3.8-flash-high, gpt-oss-120b-medium)
+  const effortMatch = /-(low|medium|high)$/.exec(model);
+  if (effortMatch) {
+    const embeddedEffort = effortMatch[1];
+    if (!effort) {
+      effort = embeddedEffort;
+    }
+    const baseModel = model.replace(/-(low|medium|high)$/, '');
+    if (baseModel.startsWith('gemini-') || baseModel.startsWith('gpt-')) {
+      model = baseModel;
+    }
+  }
+
+  // gemini-* models require an effort flag if passed as base model
+  if (model.startsWith('gemini-')) {
+    if (!effort || !['low', 'medium', 'high'].includes(effort)) {
+      effort = 'high';
+    }
+    if (model.includes('3.1-pro') && effort === 'medium') {
+      effort = 'high';
+    }
+  }
+
+  // gpt-oss models require medium effort
+  if (model.startsWith('gpt-')) {
+    if (!effort || !['low', 'medium', 'high'].includes(effort)) {
+      effort = 'medium';
+    }
+  }
+
+  return { model, effort: effort || null };
+}
+
 export function emptyUsage(agent: Agent, error: string): UsageResult {
   return { ok: false, agent, source: null, capturedAt: null, status: null, windows: [], error };
 }

@@ -29,6 +29,7 @@ import { cn } from '../utils';
 const brandIcons: Record<string, string> = {
   claude: claudeLogo,
   codex: codexLogo,
+  agy: geminiLogo,
   gemini: geminiLogo,
   telegram: telegramLogo,
   feishu: feishuLogo,

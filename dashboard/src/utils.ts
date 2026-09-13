@@ -4,6 +4,7 @@ import type { SessionInfo } from './types';
 export const AGENT_ACCEPTED_PROVIDER_KINDS: Record<Agent, readonly string[]> = {
   claude: ['anthropic', 'openai-compatible'],
   codex: ['openai', 'openai-compatible'],
+  agy: ['google'],
   gemini: ['google'],
   hermes: ['anthropic', 'openai', 'openai-compatible', 'google'],
 };
@@ -89,6 +90,16 @@ export const agentMeta: Record<string, AgentMeta> = {
     glow: 'rgba(125,211,252,0.2)',
     border: 'rgba(125,211,252,0.2)',
     advantageKey: 'config.agentAdvantageCodex',
+  },
+  agy: {
+    label: 'Antigravity',
+    shortLabel: 'AGY',
+    color: '#818cf8',
+    bg: 'rgba(129,140,248,0.12)',
+    letter: 'A',
+    glow: 'rgba(129,140,248,0.2)',
+    border: 'rgba(129,140,248,0.2)',
+    advantageKey: 'config.agentAdvantageAgy',
   },
   gemini: {
     label: 'Gemini CLI',

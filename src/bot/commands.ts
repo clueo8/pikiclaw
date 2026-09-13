@@ -422,6 +422,7 @@ export interface AgentsListData {
 const AGENT_LABEL_OVERRIDES: Record<string, string> = {
   claude: 'Claude Code',
   codex: 'Codex',
+  agy: 'Antigravity',
   gemini: 'Gemini CLI',
   hermes: 'Hermes',
 };

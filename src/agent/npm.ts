@@ -14,6 +14,7 @@ const AGENT_BREW_CASKS: Partial<Record<Agent, string>> = {
 const AGENT_LABELS: Record<Agent, string> = {
   claude: 'Claude Code',
   codex: 'Codex',
+  agy: 'Antigravity',
   gemini: 'Gemini CLI',
 };
 
@@ -35,6 +36,12 @@ const NPM_INSTALL_SPECS: Record<Agent, AgentInstallSpec> = Object.fromEntries(
 
 const AGENT_INSTALLS: Record<string, AgentInstallSpec> = {
   ...NPM_INSTALL_SPECS,
+  agy: {
+    method: 'manual',
+    command: 'curl -fsSL https://antigravity.google/install | bash',
+    docsUrl: 'https://antigravity.google/docs/cli/reference',
+    note: 'Install Google Antigravity CLI (agy) via the official installer, then authenticate.',
+  },
   hermes: {
     method: 'manual',
     command: 'curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash',

@@ -5,6 +5,7 @@ import { claudeContextWindowFromModel } from './drivers/claude.js';
 const DEFAULT_AGENT_WINDOW_TOKENS: Record<string, number> = {
   claude: 200_000,
   codex: 256_000,
+  agy: 1_000_000,
   gemini: 1_000_000,
   hermes: 128_000,
 };
@@ -14,7 +15,7 @@ const DEFAULT_AGENT_WINDOW_TOKENS: Record<string, number> = {
 // moment a model lands — which is how every Claude model once fell through to the 200k default.
 function agentWindowTokens(agent: string, model?: string | null): number {
   const m = (model || '').toLowerCase();
-  if (agent === 'gemini' && /(^|-)(2\.5|3|3\.1)/.test(m)) return 1_000_000;
+  if ((agent === 'agy' || agent === 'gemini') && /(^|-)(2\.5|3|3\.1|3\.6|3\.7|3\.8)/.test(m)) return 1_000_000;
   if (agent === 'claude') return claudeContextWindowFromModel(m) ?? DEFAULT_AGENT_WINDOW_TOKENS.claude;
   return DEFAULT_AGENT_WINDOW_TOKENS[agent] ?? 128_000;
 }
