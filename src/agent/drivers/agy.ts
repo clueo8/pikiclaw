@@ -291,6 +291,15 @@ export function parseAgyStderrLine(line: string, s: any): void {
     if (!s.errors) s.errors = [];
     if (!s.errors.includes(msg)) s.errors.push(msg);
     s.stopReason = 'quota_exhausted';
+    return;
+  }
+  if (/No capacity available/i.test(line) || (/UNAVAILABLE/i.test(line) && /code 503/i.test(line))) {
+    let msg = line.replace(/^error:\s*/i, '').trim();
+    if (!msg.includes('/models')) {
+      msg = `${msg}\n\nTip: Google capacity for this model is temporarily full. Use /models to switch to gemini-3.7-flash-high or claude-sonnet-4-6, or retry in a minute.`;
+    }
+    if (!s.errors) s.errors = [];
+    if (!s.errors.includes(msg)) s.errors.push(msg);
   }
 }
 
