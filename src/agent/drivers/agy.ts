@@ -282,9 +282,21 @@ export function parseAgyEvent(ev: any, s: any) {
   }
 }
 
+export function parseAgyStderrLine(line: string, s: any): void {
+  if (/RESOURCE_EXHAUSTED/i.test(line) || /Individual quota reached/i.test(line)) {
+    let msg = line.replace(/^error:\s*/i, '').trim();
+    if (!msg.includes('/new')) {
+      msg = `${msg}\n\nTip: Send /new to start a clean session with fresh quota.`;
+    }
+    if (!s.errors) s.errors = [];
+    if (!s.errors.includes(msg)) s.errors.push(msg);
+    s.stopReason = 'quota_exhausted';
+  }
+}
+
 export async function doAgyStream(opts: StreamOpts): Promise<StreamResult> {
   const streamOpts = { ...opts, _stdinOverride: '' };
-  return await run(agyCmd(opts), streamOpts, parseAgyEvent);
+  return await run(agyCmd(opts), streamOpts, parseAgyEvent, parseAgyStderrLine);
 }
 
 // ---- Native Session Discovery ----

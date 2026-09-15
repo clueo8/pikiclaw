@@ -5,6 +5,7 @@ import { getActiveUserConfig, loadWorkspaces, onUserConfigChange, resolveUserWor
 import {
   doStream, ensureManagedSession, findManagedThreadSession, getSessionStoredConfig, getUsage, initializeProjectSkills, listAgents, resolveAgentModels, resolveDefaultAgent, listSkills, stageSessionFiles,
   reconcileOrphanedRunningSessions, getAgentBoundModelId, setAgentBoundModelId, collapseSkillPrompt,
+  normalizeAgyModelId, normalizeClaudeModelId,
   readGoal, accountTurn, shouldContinueAfterTurn, renderContinuationPrompt, renderBudgetLimitPrompt,
   bumpContinuationCount, pauseGoal, resumeGoal, setGoal as setGoalState, clearGoal as clearGoalState,
   setCodexGoal, getCodexGoal, clearCodexGoal, pauseCodexGoal, resumeCodexGoal,
@@ -2319,7 +2320,10 @@ export class Bot {
     const storedConfig = cs.sessionId && !isPendingSessionId(cs.sessionId)
       ? getSessionStoredConfig(sessionWorkdirForConfig, cs.agent, cs.sessionId)
       : null;
-    const resolvedModel = cs.modelId || storedConfig?.model || this.modelForAgent(cs.agent);
+    const rawResolvedModel = cs.modelId || storedConfig?.model || this.modelForAgent(cs.agent);
+    const resolvedModel = (cs.agent === 'agy' || cs.agent === 'gemini')
+      ? normalizeAgyModelId(rawResolvedModel)
+      : (cs.agent === 'claude' ? normalizeClaudeModelId(rawResolvedModel) : rawResolvedModel);
     const resolvedThinkingEffort = ('thinkingEffort' in cs && typeof cs.thinkingEffort === 'string' && cs.thinkingEffort.trim())
       ? cs.thinkingEffort.trim().toLowerCase()
       : (storedConfig?.thinkingEffort || agentConfig.reasoningEffort || 'high');

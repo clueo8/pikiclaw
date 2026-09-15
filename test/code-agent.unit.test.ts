@@ -949,7 +949,7 @@ process.stdout.write(JSON.stringify({ type: 'result', session_id: 'agy-session',
     expect(argv).toContain('stream-json');
     expect(argv).toContain('--dangerously-skip-permissions');
     expect(argv).toContain('--model');
-    expect(argv).toContain('gemini-3.8-flash-high');
+    expect(argv).toContain('gemini-3.8-flash');
     expect(argv).toContain('--effort');
     expect(argv).toContain('high');
     expect(argv).toContain('--add-dir');

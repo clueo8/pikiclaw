@@ -123,7 +123,15 @@ export class AgyDriver implements AgentDriver {
           if (ev !== undefined) parseAgyEvent(ev, s, tools, ctx.emit);
         }
       });
-      child.stderr!.on('data', (c: Buffer) => { stderr += c.toString('utf8'); });
+      child.stderr!.on('data', (c: Buffer) => {
+        const chunk = c.toString('utf8');
+        stderr += chunk;
+        if (/RESOURCE_EXHAUSTED/i.test(chunk) || /Individual quota reached/i.test(chunk)) {
+          s.stopReason = 'quota_exhausted';
+          s.error = chunk.trim().replace(/^error:\s*/i, '');
+          sigterm(child);
+        }
+      });
       child.on('error', (err) => resolve({ ok: false, text: s.text, error: `agy spawn error: ${err.message}`, stopReason: 'error' }));
       child.on('close', (code) => {
         const usage: UniversalUsage = { inputTokens: s.input, outputTokens: s.output, cachedInputTokens: s.cached, contextPercent: null };

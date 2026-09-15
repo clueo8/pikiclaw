@@ -265,6 +265,14 @@ export async function run(
       if (!trimmed) continue;
       try { parseStderrLine(trimmed, s); touched = true; } catch {}
     }
+    if (stderrLineBuf && (/RESOURCE_EXHAUSTED/i.test(stderrLineBuf) || /Individual quota reached/i.test(stderrLineBuf))) {
+      try { parseStderrLine(stderrLineBuf, s); touched = true; } catch {}
+    }
+    if (s.stopReason === 'quota_exhausted') {
+      agentWarn('[quota] resource exhausted detected on stderr, terminating process tree');
+      terminateProcessTree(proc, { signal: 'SIGTERM', forceSignal: 'SIGKILL', forceAfterMs: 2000 });
+      return;
+    }
     if (touched) {
       try { opts.onText(s.text, s.thinking, s.activity, buildStreamPreviewMeta(s), null); } catch {}
     }
