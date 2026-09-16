@@ -256,12 +256,19 @@ export function parseAgyEvent(ev: any, s: any) {
     emitSessionIdUpdate(s, sessId);
 
     if (res.status === 'ERROR' || res.status === 'error' || res.status === 'failure') {
-      const message = normalizeErrorMessage(res.error)
+      let message = normalizeErrorMessage(res.error)
         || normalizeErrorMessage(res.errors)
         || normalizeErrorMessage(res.message)
         || `Antigravity returned status: ${res.status}`;
+      if (/RESOURCE_EXHAUSTED/i.test(message) || /Individual quota reached/i.test(message)) {
+        s.stopReason = 'quota_exhausted';
+        if (!message.includes('New Session') && !message.includes('/new')) {
+          message = `${message}\n\nTip: This conversation has grown too large for the model context (~9.4M tokens). Please start a fresh session (click "+ New Session" in the dashboard, or send /new in Telegram).`;
+        }
+      } else {
+        s.stopReason = 'error';
+      }
       s.errors = [message];
-      s.stopReason = 'error';
     } else {
       s.stopReason = 'end_turn';
     }

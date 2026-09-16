@@ -270,8 +270,16 @@ export function parseAgyEvent(
     if (sessId) s.sessionId = sessId;
 
     if (res.status === 'ERROR' || res.status === 'error' || res.status === 'failure') {
-      s.error = String(res.error || res.message || `status ${res.status}`);
-      s.stopReason = 'error';
+      let errStr = String(res.error || res.message || `status ${res.status}`);
+      if (/RESOURCE_EXHAUSTED/i.test(errStr) || /Individual quota reached/i.test(errStr)) {
+        s.stopReason = 'quota_exhausted';
+        if (!errStr.includes('New Session') && !errStr.includes('/new')) {
+          errStr = `${errStr}\n\nTip: This conversation has grown too large for the model context (~9.4M tokens). Please start a fresh session (click "+ New Session" in the dashboard, or send /new in Telegram).`;
+        }
+      } else {
+        s.stopReason = 'error';
+      }
+      s.error = errStr;
     } else {
       s.stopReason = res.status === 'SUCCESS' || res.status === 'success' ? 'end_turn' : res.status;
     }
