@@ -478,7 +478,7 @@ export function isAgySessionOversized(sessionId: string | null | undefined): boo
     }
   } catch {}
 
-  // 3. Check step_count in conversation_summaries.db
+  // 3. Check step_count in conversation_summaries.db (each tool call is an execution step, so >250 steps indicates a genuinely massive session)
   const summariesDb = agyDbPath();
   if (summariesDb) {
     try {
@@ -486,7 +486,7 @@ export function isAgySessionOversized(sessionId: string | null | undefined): boo
       const db = new DatabaseSync(summariesDb, { open: true, readOnly: true });
       const row = db.prepare('SELECT step_count FROM conversation_summaries WHERE conversation_id = ?').get(sessionId) as any;
       db.close();
-      if (row && typeof row.step_count === 'number' && row.step_count > 80) {
+      if (row && typeof row.step_count === 'number' && row.step_count > 250) {
         return true;
       }
     } catch {}

@@ -365,7 +365,80 @@ describe('Antigravity session oversized detection and compaction', () => {
     expect(result.seed).toContain('<compacted_history agent="agy" turns="2">');
     expect(result.seed).toContain('</compacted_history>');
     expect(result.seed).toContain('Continuing this conversation from the compacted history above');
+    expect(result.seed).toContain('Do not repeat, quote, or output <compacted_history> XML tags');
   });
+
+  it('prevents recursive nesting of <compacted_history> in compactForHandover', async () => {
+    const { compactForHandover } = await import('../src/agent/handover.ts');
+
+    const brainDir = path.join(homeDir, '.gemini', 'antigravity-cli', 'brain', 'test-nested', '.system_generated', 'logs');
+    fs.mkdirSync(brainDir, { recursive: true });
+    const transcriptPath = path.join(brainDir, 'transcript.jsonl');
+
+    // Prior turn already had a compacted_history envelope injected in the prompt
+    const nestedPrompt = `<compacted_history agent="agy" turns="10">\nUser: old user question\nAssistant: old answer\n</compacted_history>\n\n[Continuing this conversation from the compacted history above. The previous 10 turns have been summarized/tailed. Your next prompt follows.]\n\nReal user turn 1`;
+
+    const steps = [
+      { type: 'USER_INPUT', content: nestedPrompt },
+      { type: 'PLANNER_RESPONSE', content: 'answer 1' },
+      { type: 'USER_INPUT', content: 'Real user turn 2' },
+      { type: 'PLANNER_RESPONSE', content: 'answer 2' },
+    ];
+    fs.writeFileSync(transcriptPath, steps.map(s => JSON.stringify(s)).join('\n') + '\n');
+
+    const result = await compactForHandover({
+      fromAgent: 'agy',
+      fromSessionId: 'test-nested',
+      workdir: '/tmp',
+      toAgent: 'agy',
+      toModel: 'gemini-3.1-pro',
+    });
+
+    expect(result.ok).toBe(true);
+    // Should have only ONE <compacted_history> tag, not nested
+    const envelopeTagCount = (result.seed.match(/<compacted_history agent=/g) || []).length;
+    const closeCount = (result.seed.match(/<\/compacted_history>/g) || []).length;
+    expect(envelopeTagCount).toBe(1);
+    expect(closeCount).toBe(1);
+    expect(result.seed).toContain('User: Real user turn 1');
+    expect(result.seed).toContain('User: Real user turn 2');
+    expect(result.seed).not.toContain('User: <compacted_history');
+  });
+
+  it('stripInjectedPrompts correctly strips compacted_history and handover envelopes while preserving user text', async () => {
+    const { stripInjectedPrompts } = await import('../src/agent/utils.ts');
+
+    const compactedPrompt = `<compacted_history agent="agy" turns="2">\nUser: first question\nAssistant: first answer\n</compacted_history>\n\n[Continuing this conversation from the compacted history above. The previous 2 turns have been summarized/tailed. Your next prompt follows.]\n\nWhen auto scroll is off, show all kids`;
+    expect(stripInjectedPrompts(compactedPrompt)).toBe('When auto scroll is off, show all kids');
+
+    const handoverPrompt = `<handover from="claude" to="agy" turns="5">\nUser: question\nAssistant: answer\n</handover>\n\n[Continuing this conversation. The previous turns above ran under claude; you are now agy picking up where it left off. Your next user message follows.]\n\nPlease deploy to prod`;
+    expect(stripInjectedPrompts(handoverPrompt)).toBe('Please deploy to prod');
+
+    // Preserves questions where user actually mentions compacted_history in their question
+    const userQuery = 'Why do I see <compacted_history agent="agy" turns="2"> in Telegram?';
+    expect(stripInjectedPrompts(userQuery)).toBe(userQuery);
+
+    // Strips artifact return markers
+    expect(stripInjectedPrompts('Here is my query\n[Telegram Artifact Return] some data')).toBe('Here is my query');
+    expect(stripInjectedPrompts('Here is my query\n[Artifact Return] some data')).toBe('Here is my query');
+    expect(stripInjectedPrompts('Here is my query\n[Session Workspace] some data')).toBe('Here is my query');
+  });
+
+  it('extractLastSessionTurn strips injected envelopes from preview userText', async () => {
+    const { extractLastSessionTurn } = await import('../src/bot/commands.ts');
+
+    const compactedPrompt = `<compacted_history agent="agy" turns="2">\nUser: old\nAssistant: old\n</compacted_history>\n\n[Continuing this conversation from the compacted history above. The previous 2 turns have been summarized/tailed. Your next prompt follows.]\n\nWhat is the status?`;
+
+    const preview = extractLastSessionTurn([
+      { role: 'user', text: compactedPrompt },
+      { role: 'assistant', text: 'All systems green.' },
+    ]);
+
+    expect(preview).not.toBeNull();
+    expect(preview?.userText).toBe('What is the status?');
+    expect(preview?.assistantText).toBe('All systems green.');
+  });
+
 
   it('ensures gemini is removed from selectable driver IDs and normalizes to agy', async () => {
     const { allDriverIds, allDrivers, listAgents } = await import('../src/agent/index.ts');

@@ -1,6 +1,7 @@
 import type { Agent, HandoverRef, TailMessage } from './types.js';
 import { getSessionMessages } from './session.js';
 import { claudeContextWindowFromModel } from './drivers/claude.js';
+import { stripInjectedPrompts } from './utils.js';
 
 const DEFAULT_AGENT_WINDOW_TOKENS: Record<string, number> = {
   claude: 200_000,
@@ -89,8 +90,8 @@ export async function compactForHandover(opts: CompactForHandoverOpts): Promise<
     ? `</compacted_history>`
     : `</handover>`;
   const trailerText = isSameAgent
-    ? `\n[Continuing this conversation from the compacted history above. The previous ${turnsTotal} turns have been summarized/tailed. Your next prompt follows.]`
-    : `\n[Continuing this conversation. The previous turns above ran under ${opts.fromAgent}; you are now ${opts.toAgent} picking up where it left off. Your next user message follows.]`;
+    ? `\n[Continuing this conversation from the compacted history above. The previous ${turnsTotal} turns have been summarized/tailed above for your context only. Do not repeat, quote, or output <compacted_history> XML tags. Your next prompt follows.]`
+    : `\n[Continuing this conversation. The previous turns above ran under ${opts.fromAgent}; you are now ${opts.toAgent} picking up where it left off. This history is for your context only. Do not repeat, quote, or output <handover> XML tags. Your next user message follows.]`;
   const overhead = envelopeOpen.length + envelopeClose.length + trailerText.length + 8 ;
   const messageBudget = Math.max(0, budgetChars - overhead);
 
@@ -100,13 +101,16 @@ export async function compactForHandover(opts: CompactForHandoverOpts): Promise<
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i];
     const label = msg.role === 'user' ? 'User' : 'Assistant';
-    const line = `${label}: ${msg.text}`;
+    const text = stripInjectedPrompts(msg.text);
+    if (!text.trim()) continue;
+    const line = `${label}: ${text}`;
     if (used + line.length + 1 > messageBudget) break;
     lines.push(line);
     used += line.length + 1;
     kept += 1;
   }
   lines.reverse();
+
 
   if (!lines.length) {
     return { ...makeEmptyHandoverResult('budget too small'), budgetChars };

@@ -564,20 +564,60 @@ export function readTailLines(filePath: string, maxBytes = 256 * 1024): string[]
   } catch { return []; }
 }
 
+export const INJECTED_PROMPT_MARKERS = [
+  '\n[Session Workspace]',
+  '\n[Telegram Artifact Return]',
+  '\n[Artifact Return]',
+];
+
+const COMPACTED_ENVELOPE_START_RE = /^<(?:compacted_history|handover)\b/i;
+const COMPACTED_ENVELOPE_BLOCK_RE = /^<(compacted_history|handover)\b[\s\S]*?<\/\1>\s*(?:\[Continuing this conversation[\s\S]*?\])?\s*/i;
+const CONTINUING_TRAILER_RE = /^\[Continuing this conversation[\s\S]*?\]\s*/i;
+
 export function stripInjectedPrompts(text: string): string {
-  const markers = ['\n[Session Workspace]'];
-  for (const m of markers) {
-    const idx = text.indexOf(m);
-    if (idx >= 0) text = text.slice(0, idx).trim();
+  if (!text) return '';
+  let result = text;
+
+  // Strip leading compacted_history / handover envelopes (including any recursively nested blocks)
+  while (COMPACTED_ENVELOPE_START_RE.test(result.trimStart())) {
+    const trimmed = result.trimStart();
+    const match = COMPACTED_ENVELOPE_BLOCK_RE.exec(trimmed);
+    if (match) {
+      result = trimmed.slice(match[0].length);
+    } else {
+      // If closing tag is missing (e.g. truncated), look for trailer or end of tag
+      const trailerMatch = /\[Continuing this conversation[\s\S]*?\]\s*/i.exec(trimmed);
+      if (trailerMatch) {
+        result = trimmed.slice(trailerMatch.index + trailerMatch[0].length);
+      } else {
+        const tagClose = trimmed.indexOf('>');
+        if (tagClose >= 0) {
+          result = trimmed.slice(tagClose + 1);
+        } else {
+          break;
+        }
+      }
+    }
   }
-  if (text.startsWith('# Context from')) {
+
+  // Strip any standalone leading trailer
+  result = result.replace(CONTINUING_TRAILER_RE, '');
+
+  for (const m of INJECTED_PROMPT_MARKERS) {
+    const idx = result.indexOf(m);
+    if (idx >= 0) result = result.slice(0, idx).trim();
+  }
+
+  if (result.startsWith('# Context from')) {
     const tag = '## My request for Codex:\n';
-    const idx = text.indexOf(tag);
-    if (idx >= 0) return text.slice(idx + tag.length).trim();
+    const idx = result.indexOf(tag);
+    if (idx >= 0) return result.slice(idx + tag.length).trim();
     return '';
   }
-  return text;
+
+  return result.trim();
 }
+
 
 export const SESSION_PREVIEW_IGNORED_USER_PATTERNS = [
   /^\[Request interrupted by user(?: for tool use)?\]$/i,

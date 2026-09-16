@@ -5,6 +5,7 @@ import { fmtTokens, fmtUptime, fmtBytes } from './bot.js';
 import {
   getProjectSkillPaths, normalizeClaudeModelId, sessionListDisplayTitle,
   listAllMcpExtensions, listSkills as listAllSkills, isSystemInjectedUserText,
+  stripInjectedPrompts,
 } from '../agent/index.js';
 import { getDriver } from '../agent/driver.js';
 import type { UsageResult } from '../agent/index.js';
@@ -390,7 +391,8 @@ export function extractLastSessionTurn(
     }
   }
 
-  const userText = String(lastUserIndex >= 0 ? messages[lastUserIndex].text : '').trim() || null;
+  const rawUserText = lastUserIndex >= 0 ? messages[lastUserIndex].text : '';
+  const userText = stripInjectedPrompts(rawUserText).trim() || null;
   const assistantTexts: string[] = [];
   for (let i = lastUserIndex >= 0 ? lastUserIndex + 1 : 0; i < messages.length; i++) {
     if (messages[i].role === 'assistant' && messages[i].text) assistantTexts.push(messages[i].text);
