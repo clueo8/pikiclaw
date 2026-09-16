@@ -1,4 +1,4 @@
-export type Agent = 'claude' | 'codex' | 'agy' | 'gemini' | 'hermes';
+export type Agent = 'claude' | 'codex' | 'agy' | 'hermes';
 export type OpenTarget = 'vscode' | 'cursor' | 'windsurf' | 'finder' | 'default';
 
 export interface AgentInfo {

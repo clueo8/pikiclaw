@@ -73,6 +73,7 @@ const MACOS_USER_ACTIVITY_PULSE_TIMEOUT_S = BOT_TIMEOUTS.macosUserActivityPulseT
 
 export function normalizeAgent(raw: string): Agent {
   const v = raw.trim().toLowerCase();
+  if (v === 'gemini') return 'agy';
   if (!hasDriver(v)) throw new Error(`Invalid agent: ${v}. Use: ${allDriverIds().join(', ')}`);
   return v;
 }

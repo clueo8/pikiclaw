@@ -176,7 +176,8 @@ export function resolveDefaultAgent(
   preferred: Agent | string | null | undefined,
   agents: AgentInfo[] = listAgents().agents,
 ): Agent {
-  const want = typeof preferred === 'string' ? preferred.trim().toLowerCase() : '';
+  const wantRaw = typeof preferred === 'string' ? preferred.trim().toLowerCase() : '';
+  const want = wantRaw === 'gemini' ? 'agy' : wantRaw;
   const wantValid = !!want && hasDriver(want);
   const installed = agents.filter(a => a.installed).map(a => a.agent);
   if (wantValid && installed.includes(want as Agent)) return want as Agent;

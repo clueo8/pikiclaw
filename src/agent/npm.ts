@@ -1,9 +1,8 @@
 import type { Agent } from './index.js';
 
-const AGENT_PACKAGES: Record<Agent, string> = {
+const AGENT_PACKAGES: Partial<Record<Agent, string>> = {
   claude: '@anthropic-ai/claude-code',
   codex: '@openai/codex',
-  gemini: '@google/gemini-cli',
 };
 
 const AGENT_BREW_CASKS: Partial<Record<Agent, string>> = {
@@ -15,7 +14,7 @@ const AGENT_LABELS: Record<Agent, string> = {
   claude: 'Claude Code',
   codex: 'Codex',
   agy: 'Antigravity',
-  gemini: 'Gemini CLI',
+  hermes: 'Hermes',
 };
 
 export type AgentInstallMethod = 'npm' | 'manual';

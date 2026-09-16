@@ -426,6 +426,7 @@ export class GeminiDriver implements AgentDriver {
   readonly id = 'gemini';
   readonly cmd = 'agy';
   readonly thinkLabel = 'Thinking';
+  readonly hidden = true;
   readonly acceptedProviderKinds = ['google'] as const;
 
   async doStream(opts: StreamOpts): Promise<StreamResult> {

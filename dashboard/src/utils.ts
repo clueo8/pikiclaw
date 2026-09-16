@@ -5,7 +5,6 @@ export const AGENT_ACCEPTED_PROVIDER_KINDS: Record<Agent, readonly string[]> = {
   claude: ['anthropic', 'openai-compatible'],
   codex: ['openai', 'openai-compatible'],
   agy: ['google'],
-  gemini: ['google'],
   hermes: ['anthropic', 'openai', 'openai-compatible', 'google'],
 };
 
@@ -101,16 +100,6 @@ export const agentMeta: Record<string, AgentMeta> = {
     border: 'rgba(129,140,248,0.2)',
     advantageKey: 'config.agentAdvantageAgy',
   },
-  gemini: {
-    label: 'Gemini CLI',
-    shortLabel: 'Gemini',
-    color: '#c4b5fd',
-    bg: 'rgba(196,181,253,0.12)',
-    letter: 'G',
-    glow: 'rgba(196,181,253,0.2)',
-    border: 'rgba(196,181,253,0.2)',
-    advantageKey: 'config.agentAdvantageGemini',
-  },
   hermes: {
     label: 'Hermes',
     shortLabel: 'Hermes',
@@ -124,7 +113,8 @@ export const agentMeta: Record<string, AgentMeta> = {
 };
 
 export function getAgentMeta(agent: string): AgentMeta {
-  return agentMeta[agent] || { ...defaultMeta, label: agent, shortLabel: agent };
+  const effectiveAgent = agent === 'gemini' ? 'agy' : agent;
+  return agentMeta[effectiveAgent] || { ...defaultMeta, label: agent, shortLabel: agent };
 }
 
 export function foldUltraEffort(

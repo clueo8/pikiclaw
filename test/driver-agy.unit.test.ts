@@ -366,5 +366,24 @@ describe('Antigravity session oversized detection and compaction', () => {
     expect(result.seed).toContain('</compacted_history>');
     expect(result.seed).toContain('Continuing this conversation from the compacted history above');
   });
+
+  it('ensures gemini is removed from selectable driver IDs and normalizes to agy', async () => {
+    const { allDriverIds, allDrivers, listAgents } = await import('../src/agent/index.ts');
+    const { normalizeAgent } = await import('../src/bot/bot.ts');
+
+    const ids = allDriverIds();
+    expect(ids).toContain('agy');
+    expect(ids).not.toContain('gemini');
+
+    const drivers = allDrivers();
+    expect(drivers.some(d => d.id === 'gemini')).toBe(false);
+
+    const agentList = listAgents();
+    expect(agentList.agents.some(a => a.agent === 'gemini')).toBe(false);
+
+    expect(normalizeAgent('gemini')).toBe('agy');
+    expect(normalizeAgent('agy')).toBe('agy');
+  });
 });
+
 

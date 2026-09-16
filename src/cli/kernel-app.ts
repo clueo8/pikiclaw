@@ -28,7 +28,6 @@ const DEMO_MODELS: Record<string, any[]> = {
     { id: 'gpt-5.6-luna', label: 'GPT-5.6-Luna', providerName: 'openai', contextWindow: 372000 },
   ],
   agy: [{ id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', providerName: 'google', contextWindow: 1000000 }],
-  gemini: [{ id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', providerName: 'google', contextWindow: 1000000 }],
   opencode: [{ id: 'claude-sonnet-4-6', label: 'OpenCode · Sonnet 4.6 (ACP)', providerName: 'opencode', contextWindow: 200000 }],
   echo: [{ id: 'echo-1', label: 'Echo (hermetic)', providerName: 'local', contextWindow: 8192 }],
 };
@@ -101,7 +100,7 @@ export async function runKernelApp(argv: string[]): Promise<void> {
   const loom = createLoom({
     appNamespace: 'pikiloom-kernel',
     // OpenCode (and any other ACP CLI) plugs in via the generic AcpDriver — same registry as the natives.
-    drivers: [new EchoDriver(), new ClaudeDriver(), new CodexDriver(), new AgyDriver(), new GeminiDriver(), new HermesDriver(), new AcpDriver({ id: 'opencode', command: 'opencode', args: ['acp'] })],
+    drivers: [new EchoDriver(), new ClaudeDriver(), new CodexDriver(), new AgyDriver(), new HermesDriver(), new AcpDriver({ id: 'opencode', command: 'opencode', args: ['acp'] })],
     defaultAgent: 'claude',
     surfaces,
     catalog,
