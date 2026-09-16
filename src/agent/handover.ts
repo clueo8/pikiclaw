@@ -81,9 +81,16 @@ export async function compactForHandover(opts: CompactForHandoverOpts): Promise<
   }
 
   const messagesTotal = messages.length;
-  const envelopeOpen = `<handover from="${opts.fromAgent}" to="${opts.toAgent}" turns="${turnsTotal}">`;
-  const envelopeClose = `</handover>`;
-  const trailerText = `\n[Continuing this conversation. The previous turns above ran under ${opts.fromAgent}; you are now ${opts.toAgent} picking up where it left off. Your next user message follows.]`;
+  const isSameAgent = opts.fromAgent === opts.toAgent;
+  const envelopeOpen = isSameAgent
+    ? `<compacted_history agent="${opts.fromAgent}" turns="${turnsTotal}">`
+    : `<handover from="${opts.fromAgent}" to="${opts.toAgent}" turns="${turnsTotal}">`;
+  const envelopeClose = isSameAgent
+    ? `</compacted_history>`
+    : `</handover>`;
+  const trailerText = isSameAgent
+    ? `\n[Continuing this conversation from the compacted history above. The previous ${turnsTotal} turns have been summarized/tailed. Your next prompt follows.]`
+    : `\n[Continuing this conversation. The previous turns above ran under ${opts.fromAgent}; you are now ${opts.toAgent} picking up where it left off. Your next user message follows.]`;
   const overhead = envelopeOpen.length + envelopeClose.length + trailerText.length + 8 ;
   const messageBudget = Math.max(0, budgetChars - overhead);
 

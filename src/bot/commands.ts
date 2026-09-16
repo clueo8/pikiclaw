@@ -187,6 +187,18 @@ function truncate(text: string, max: number): string {
   return `${text.slice(0, Math.max(0, max - 1)).trimEnd()}…`;
 }
 
+export async function handleCompactCommand(bot: Bot, chatId: ChatId): Promise<string> {
+  const res = await bot.compactConversationForChat(chatId);
+  if (!res.ok) {
+    return `Compact failed: ${res.error || 'Unknown error'}`;
+  }
+  return [
+    `Compacted session ${res.sessionId?.slice(0, 8)}:`,
+    `Retained ${res.messagesIncluded}/${res.messagesTotal} messages across ${res.turnsTotal} turns (~${res.charsIncluded} chars).`,
+    `Send a message to continue in a fresh session with this context.`,
+  ].join('\n');
+}
+
 export interface SessionEntry {
   key: string;
   agent: Agent;

@@ -1,8 +1,35 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
 import { spawn, type ChildProcess } from 'node:child_process';
 import type { AgentDriver, AgentTurnInput, DriverContext, DriverResult, DriverEvent, TuiInput, TuiSpec, NativeSessionInfo } from '../contracts/driver.js';
 import type { UniversalUsage } from '../protocol/index.js';
 import { discoverAgyNativeSessions } from './native.js';
 import { createLineBuffer, parseJsonLine, sigterm, wireAbort } from './shared.js';
+
+export function isAgySessionOversized(sessionId: string | null | undefined, homeDir?: string): boolean {
+  if (!sessionId || sessionId.startsWith('pending_')) return false;
+  const home = homeDir || process.env.HOME || os.homedir();
+  if (!home) return false;
+
+  const convDb = path.join(home, '.gemini', 'antigravity-cli', 'conversations', `${sessionId}.db`);
+  try {
+    if (fs.existsSync(convDb)) {
+      const stat = fs.statSync(convDb);
+      if (stat.size > 3 * 1024 * 1024) return true;
+    }
+  } catch {}
+
+  const transcript = path.join(home, '.gemini', 'antigravity-cli', 'brain', sessionId, '.system_generated', 'logs', 'transcript.jsonl');
+  try {
+    if (fs.existsSync(transcript)) {
+      const stat = fs.statSync(transcript);
+      if (stat.size > 1.5 * 1024 * 1024) return true;
+    }
+  } catch {}
+
+  return false;
+}
 
 export function normalizeAgyModelId(model: unknown): string {
   const m = typeof model === 'string' ? model.trim().toLowerCase() : '';

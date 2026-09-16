@@ -169,5 +169,7 @@ export {
 
 export { doClaudeStream } from './drivers/claude.js';
 export { doCodexStream, buildCodexTurnInput, shutdownCodexServer, getCodexUsageLive, humanizeCodexError } from './drivers/codex.js';
+export { doAgyStream, isAgySessionOversized } from './drivers/agy.js';
 export { doGeminiStream } from './drivers/gemini.js';
 export { doHermesStream } from './drivers/hermes.js';
+export { compactForHandover, describeHandoverRef } from './handover.js';

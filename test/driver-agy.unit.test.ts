@@ -292,3 +292,79 @@ describe('Antigravity command builder', () => {
     expect(cmd4).toContain('high');
   });
 });
+
+describe('Antigravity session oversized detection and compaction', () => {
+  const originalHome = process.env.HOME;
+  let homeDir = '';
+
+  beforeEach(() => {
+    vi.resetModules();
+    homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pikiloom-agy-oversize-'));
+    process.env.HOME = homeDir;
+  });
+
+  afterEach(() => {
+    process.env.HOME = originalHome;
+    try {
+      fs.rmSync(homeDir, { recursive: true, force: true });
+    } catch {}
+  });
+
+  it('detects oversized sessions via DB size, transcript size, and step count', async () => {
+    const { isAgySessionOversized } = await import('../src/agent/drivers/agy.ts');
+
+    expect(isAgySessionOversized(null)).toBe(false);
+    expect(isAgySessionOversized('pending_123')).toBe(false);
+    expect(isAgySessionOversized('nonexistent')).toBe(false);
+
+    // 1. Oversized via SQLite DB > 3 MB
+    const convDir = path.join(homeDir, '.gemini', 'antigravity-cli', 'conversations');
+    fs.mkdirSync(convDir, { recursive: true });
+    const largeDb = path.join(convDir, 'large-db.db');
+    fs.writeFileSync(largeDb, Buffer.alloc(3.5 * 1024 * 1024));
+    expect(isAgySessionOversized('large-db')).toBe(true);
+
+    // 2. Oversized via JSONL transcript > 1.5 MB
+    const brainDir = path.join(homeDir, '.gemini', 'antigravity-cli', 'brain', 'large-transcript', '.system_generated', 'logs');
+    fs.mkdirSync(brainDir, { recursive: true });
+    const largeTranscript = path.join(brainDir, 'transcript.jsonl');
+    fs.writeFileSync(largeTranscript, Buffer.alloc(1.6 * 1024 * 1024));
+    expect(isAgySessionOversized('large-transcript')).toBe(true);
+
+    // 3. Normal size session
+    const normalTranscript = path.join(homeDir, '.gemini', 'antigravity-cli', 'brain', 'normal-session', '.system_generated', 'logs');
+    fs.mkdirSync(normalTranscript, { recursive: true });
+    fs.writeFileSync(path.join(normalTranscript, 'transcript.jsonl'), 'small content');
+    expect(isAgySessionOversized('normal-session')).toBe(false);
+  });
+
+  it('formats compactForHandover with <compacted_history> when fromAgent equals toAgent', async () => {
+    const { compactForHandover } = await import('../src/agent/handover.ts');
+
+    const brainDir = path.join(homeDir, '.gemini', 'antigravity-cli', 'brain', 'test-compact', '.system_generated', 'logs');
+    fs.mkdirSync(brainDir, { recursive: true });
+    const transcriptPath = path.join(brainDir, 'transcript.jsonl');
+
+    const steps = [
+      { type: 'USER_INPUT', content: 'step 1 user' },
+      { type: 'PLANNER_RESPONSE', content: 'step 1 assistant' },
+      { type: 'USER_INPUT', content: 'step 2 user' },
+      { type: 'PLANNER_RESPONSE', content: 'step 2 assistant' },
+    ];
+    fs.writeFileSync(transcriptPath, steps.map(s => JSON.stringify(s)).join('\n') + '\n');
+
+    const result = await compactForHandover({
+      fromAgent: 'agy',
+      fromSessionId: 'test-compact',
+      workdir: '/tmp',
+      toAgent: 'agy',
+      toModel: 'gemini-3.1-pro',
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.seed).toContain('<compacted_history agent="agy" turns="2">');
+    expect(result.seed).toContain('</compacted_history>');
+    expect(result.seed).toContain('Continuing this conversation from the compacted history above');
+  });
+});
+

@@ -455,6 +455,46 @@ function findAgyTranscriptFile(sessionId: string): string | null {
   return null;
 }
 
+export function isAgySessionOversized(sessionId: string | null | undefined): boolean {
+  if (!sessionId || isPendingSessionId(sessionId)) return false;
+  const home = getHome();
+  if (!home) return false;
+
+  // 1. Check conversation SQLite DB size (sessions > 3 MB carry excessive prompt context)
+  const convDb = path.join(home, '.gemini', 'antigravity-cli', 'conversations', `${sessionId}.db`);
+  try {
+    if (fs.existsSync(convDb)) {
+      const stat = fs.statSync(convDb);
+      if (stat.size > 3 * 1024 * 1024) return true;
+    }
+  } catch {}
+
+  // 2. Check JSONL transcript size (> 1.5 MB transcript will exhaust per-minute tokens)
+  const transcriptPath = findAgyTranscriptFile(sessionId);
+  try {
+    if (transcriptPath && fs.existsSync(transcriptPath)) {
+      const stat = fs.statSync(transcriptPath);
+      if (stat.size > 1.5 * 1024 * 1024) return true;
+    }
+  } catch {}
+
+  // 3. Check step_count in conversation_summaries.db
+  const summariesDb = agyDbPath();
+  if (summariesDb) {
+    try {
+      const { DatabaseSync } = nodeRequire('node:sqlite');
+      const db = new DatabaseSync(summariesDb, { open: true, readOnly: true });
+      const row = db.prepare('SELECT step_count FROM conversation_summaries WHERE conversation_id = ?').get(sessionId) as any;
+      db.close();
+      if (row && typeof row.step_count === 'number' && row.step_count > 80) {
+        return true;
+      }
+    } catch {}
+  }
+
+  return false;
+}
+
 export function getAgySessionTail(opts: SessionTailOpts): SessionTailResult {
   const limit = opts.limit ?? 4;
   const filePath = findAgyTranscriptFile(opts.sessionId);
