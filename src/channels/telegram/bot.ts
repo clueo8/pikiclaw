@@ -74,7 +74,7 @@ import {
 import { currentHumanLoopQuestion, humanLoopOptionSelected, type HumanLoopPromptState, type ResolvedHumanLoopAnswers } from '../../bot/human-loop.js';
 import { TelegramChannel, type TgContext, type TgCallbackContext, type TgMessage } from './channel.js';
 import { splitText, supportsChannelCapability } from '../base.js';
-import { getActiveUserConfig, loadKnownChatIds } from '../../core/config/user-config.js';
+import { getActiveUserConfig, loadKnownChatIds, updateUserConfig } from '../../core/config/user-config.js';
 import { VERSION } from '../../core/version.js';
 
 const telegramPreviewRenderer: LivePreviewRenderer = {
@@ -115,6 +115,7 @@ export class TelegramBot extends Bot {
   private shutdownForceExitTimer: ReturnType<typeof setTimeout> | null = null;
   private signalHandlers: Partial<Record<ProcessSignal, () => void>> = {};
   private processRuntimeCleanup: (() => void) | null = null;
+  private notifyOnComplete = false;
 
   constructor() {
     super();
@@ -124,6 +125,10 @@ export class TelegramBot extends Bot {
     }
     this.token = String(config.telegramBotToken || process.env.TELEGRAM_BOT_TOKEN || '').trim();
     if (!this.token) throw new Error('Missing Telegram token. Configure via dashboard or set TELEGRAM_BOT_TOKEN');
+    this.notifyOnComplete = Boolean(
+      config.telegramNotifyOnComplete ??
+      (process.env.TELEGRAM_NOTIFY_ON_COMPLETE === 'true' || process.env.TELEGRAM_NOTIFY_ON_COMPLETE === '1'),
+    );
   }
 
   public override requestStop(): void {
@@ -141,6 +146,10 @@ export class TelegramBot extends Bot {
     const mergedAllowed = parseAllowedChatIds(process.env.PIKILOOM_ALLOWED_IDS || '');
     for (const id of parseAllowedChatIds(String(config.telegramAllowedChatIds || ''))) mergedAllowed.add(id);
     this.allowedChatIds = mergedAllowed;
+
+    if (typeof config.telegramNotifyOnComplete === 'boolean') {
+      this.notifyOnComplete = config.telegramNotifyOnComplete;
+    }
   }
 
   private static readonly SKILL_CMD_PREFIX = SKILL_CMD_PREFIX;
@@ -523,6 +532,29 @@ export class TelegramBot extends Bot {
     void requestProcessRestart({ log: msg => this.log(msg) });
   }
 
+  private async cmdNotify(ctx: TgContext, args: string) {
+    const raw = args.trim().toLowerCase();
+    if (raw === 'on' || raw === 'enable' || raw === 'true' || raw === '1') {
+      this.notifyOnComplete = true;
+      try { updateUserConfig({ telegramNotifyOnComplete: true }); } catch {}
+      await ctx.reply('<b>Completion Notification: Enabled</b>\nWhen complete, a new message will be sent so your phone notifies you.', { parseMode: 'HTML' });
+      return;
+    }
+    if (raw === 'off' || raw === 'disable' || raw === 'false' || raw === '0') {
+      this.notifyOnComplete = false;
+      try { updateUserConfig({ telegramNotifyOnComplete: false }); } catch {}
+      await ctx.reply('<b>Completion Notification: Disabled</b>\nResponses will update in-place silently without sending a new message.', { parseMode: 'HTML' });
+      return;
+    }
+    this.notifyOnComplete = !this.notifyOnComplete;
+    try { updateUserConfig({ telegramNotifyOnComplete: this.notifyOnComplete }); } catch {}
+    const state = this.notifyOnComplete ? 'Enabled' : 'Disabled';
+    const detail = this.notifyOnComplete
+      ? 'A new message will be sent upon completion to trigger phone notifications.'
+      : 'Responses will update in-place silently without sending a new message.';
+    await ctx.reply(`<b>Completion Notification: ${state}</b>\n${detail}\n\nUse <code>/notify on</code> or <code>/notify off</code> to change.`, { parseMode: 'HTML' });
+  }
+
   private async cmdGoal(ctx: TgContext, args: string) {
     const reply = await handleGoalCommand(this, ctx.chatId, args);
     if (reply == null) {
@@ -618,7 +650,7 @@ export class TelegramBot extends Bot {
         const sent = await this.channel.send(
           chatId,
           buildInitialPreviewHtml(opts.agent, startConfig.model, startConfig.effort, false),
-          { parseMode: 'HTML' },
+          { parseMode: 'HTML', disableNotification: this.notifyOnComplete },
         );
         phId = typeof sent === 'number' ? sent : null;
         if (phId != null) this.registerSessionMessage(chatId, phId, opts.session);
@@ -660,6 +692,18 @@ export class TelegramBot extends Bot {
       onFailure: async (error) => {
         try { await livePreview?.settle(); } catch {}
         const errorHtml = `<b>Error</b>\n\n<code>${escapeHtml(error.slice(0, 500))}</code>`;
+        if (this.notifyOnComplete) {
+          try {
+            const sent = await this.channel.send(chatId, errorHtml, { parseMode: 'HTML' });
+            this.registerSessionMessage(chatId, typeof sent === 'number' ? sent : null, session);
+          } catch (e: any) {
+            this.debug(`[im-presenter telegram] error send failed chat=${chatId}: ${e?.message || e}`);
+          }
+          if (phId != null) {
+            try { await this.channel.deleteMessage(chatId, phId); } catch {}
+          }
+          return;
+        }
         if (phId != null) {
           try {
             await this.channel.editMessage(chatId, phId, errorHtml, { parseMode: 'HTML', keyboard: { inline_keyboard: [] } });
@@ -771,7 +815,15 @@ export class TelegramBot extends Bot {
     const startConfig = this.resolveSessionStreamConfig(session);
     let phId: number | null = null;
     if (canEditMessages) {
-      const placeholderId = await ctx.reply(buildInitialPreviewHtml(session.agent, startConfig.model, startConfig.effort, waiting, queuePosition), { parseMode: 'HTML', messageThreadId, keyboard: placeholderKeyboard });
+      const placeholderId = await ctx.reply(
+        buildInitialPreviewHtml(session.agent, startConfig.model, startConfig.effort, waiting, queuePosition),
+        {
+          parseMode: 'HTML',
+          messageThreadId,
+          keyboard: placeholderKeyboard,
+          disableNotification: this.notifyOnComplete,
+        },
+      );
       phId = typeof placeholderId === 'number' ? placeholderId : null;
       if (phId != null) {
         this.registerSessionMessage(ctx.chatId, phId, session);
@@ -883,7 +935,13 @@ export class TelegramBot extends Bot {
         });
         this.warn(`[handleMessage] task failed chat=${ctx.chatId} session=${session.sessionId} error=${msgText}`);
         const errorHtml = `<b>Error</b>\n\n<code>${escapeHtml(msgText.slice(0, 500))}</code>`;
-        if (phId != null) {
+        if (this.notifyOnComplete) {
+          const sent = await this.channel.send(ctx.chatId, errorHtml, { parseMode: 'HTML', replyTo: ctx.messageId, messageThreadId }).catch(() => null);
+          this.registerSessionMessage(ctx.chatId, typeof sent === 'number' ? sent : null, session);
+          if (phId != null) {
+            try { await this.channel.deleteMessage(ctx.chatId, phId); } catch {}
+          }
+        } else if (phId != null) {
           try {
             await this.channel.editMessage(ctx.chatId, phId, errorHtml, { parseMode: 'HTML', keyboard: { inline_keyboard: [] } });
             this.registerSessionMessage(ctx.chatId, phId, session);
@@ -959,7 +1017,9 @@ export class TelegramBot extends Bot {
     agent: Agent,
     result: StreamResult,
   ): Promise<{ primaryMessageId: number | null; messageIds: number[] }> {
-    const rendered = buildFinalReplyRender(agent, result);
+    const rendered = buildFinalReplyRender(agent, result, {
+      omitActivity: this.notifyOnComplete,
+    });
     const messageIds: number[] = [];
     const remember = (messageId: number | null) => {
       if (typeof messageId === 'number' && !messageIds.includes(messageId)) messageIds.push(messageId);
@@ -971,7 +1031,7 @@ export class TelegramBot extends Bot {
       messageThreadId: anchor.messageThreadId,
     });
     const replacePreview = async (text: string) => {
-      if (phId != null) {
+      if (!this.notifyOnComplete && phId != null) {
         try {
           await this.channel.editMessage(anchor.chatId, phId, text, { parseMode: 'HTML', keyboard: { inline_keyboard: [] } });
           return remember(phId);
@@ -1006,7 +1066,7 @@ export class TelegramBot extends Bot {
           const chunkText = isLast ? `${chunks[i]}${rendered.footerHtml}` : chunks[i];
           remember(await sendFinalText(chunkText, finalMsgId ?? phId ?? anchor.replyTo));
         }
-        if (phId != null) {
+        if (!this.notifyOnComplete && phId != null) {
           try { await this.channel.editMessage(anchor.chatId, phId, firstHtml || '(done)', { parseMode: 'HTML', keyboard: { inline_keyboard: [] } }); } catch {}
         }
       } else {
@@ -1015,9 +1075,13 @@ export class TelegramBot extends Bot {
       }
     }
 
+    if (this.notifyOnComplete && phId != null) {
+      try { await this.channel.deleteMessage(anchor.chatId, phId); } catch {}
+    }
+
     const dispatched = await dispatchImageBlocks(this.channel, result.assistantBlocks, {
       chatId: anchor.chatId,
-      replyTo: finalMsgId ?? phId ?? anchor.replyTo,
+      replyTo: finalMsgId ?? (this.notifyOnComplete ? undefined : phId) ?? anchor.replyTo,
       messageThreadId: anchor.messageThreadId,
       log: (message) => this.debug(message),
     });
@@ -1243,6 +1307,7 @@ export class TelegramBot extends Bot {
         case 'switch':   await this.cmdSwitch(ctx); return;
         case 'workspaces': await this.cmdWorkspaces(ctx); return;
         case 'restart':  await this.cmdRestart(ctx); return;
+        case 'notify':   await this.cmdNotify(ctx, args); return;
         default:
           if (cmd.startsWith(TelegramBot.SKILL_CMD_PREFIX)) {
             await this.cmdSkill(cmd, args, ctx);

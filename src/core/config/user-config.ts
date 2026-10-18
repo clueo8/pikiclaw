@@ -65,6 +65,7 @@ export interface UserConfig {
   telegramBotToken?: string;
   telegramAllowedChatIds?: string;
   telegramKnownChatIds?: string[];
+  telegramNotifyOnComplete?: boolean;
   feishuAppId?: string;
   feishuAppSecret?: string;
   feishuKnownChatIds?: string[];

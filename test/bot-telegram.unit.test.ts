@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { TelegramBot } from '../src/channels/telegram/bot.ts';
 import { TelegramChannel } from '../src/channels/telegram/channel.ts';
+import { buildFinalReplyRender } from '../src/channels/telegram/render.ts';
 import * as agentDriver from '../src/agent/driver.ts';
 import type { Agent, StreamResult } from '../src/agent/index.ts';
 import { ensureManagedSession } from '../src/agent/index.ts';
@@ -802,5 +803,100 @@ describe('TelegramBot', () => {
       sessionId: 'sess-original',
       workdir: originalWorkdir,
     });
+  });
+
+  it('supports telegramNotifyOnComplete to send new message and delete placeholder without activity block', async () => {
+    const harness = createBot();
+    (harness.bot as any).notifyOnComplete = true;
+
+    const result = await (harness.bot as any).sendFinalReply(
+      harness.ctx,
+      123,
+      'agy',
+      makeStreamResult('agy', {
+        message: 'All done!',
+        activity: 'Tool done: check status\nRan: git status',
+      }),
+    );
+
+    // Should NOT edit the placeholder
+    expect(harness.edits).toHaveLength(0);
+    // Should send the final response as a fresh message
+    expect(harness.sends).toHaveLength(1);
+    expect(harness.sends[0].text).toContain('All done!');
+    // Should NOT contain the activity block in the message
+    expect(harness.sends[0].text).not.toContain('Activity');
+    expect(harness.sends[0].text).not.toContain('Tool done');
+    // Should delete the placeholder message
+    expect(harness.channel.deleteMessage).toHaveBeenCalledWith(harness.ctx.chatId, 123);
+    // Primary message ID should be the newly sent message ID (777)
+    expect(result.primaryMessageId).toBe(777);
+  });
+
+  it('sends initial placeholder silently when notifyOnComplete is true', async () => {
+    const harness = createBot();
+    (harness.bot as any).notifyOnComplete = true;
+
+    let replyOpts: any = null;
+    harness.ctx.reply = vi.fn(async (_text: string, opts?: any) => {
+      replyOpts = opts;
+      return 456;
+    });
+
+    vi.spyOn(harness.bot as any, 'runStream').mockResolvedValue(makeStreamResult('agy', { message: 'Finished' }));
+
+    await (harness.bot as any).handleMessage({ text: 'hello', files: [] }, harness.ctx);
+
+    await vi.waitFor(() => {
+      expect(replyOpts).not.toBeNull();
+    });
+
+    expect(replyOpts?.disableNotification).toBe(true);
+  });
+
+  it('handles /notify command to toggle and set notification preference', async () => {
+    const harness = createBot();
+    let replyText = '';
+    harness.ctx.reply = vi.fn(async (text: string) => {
+      replyText = text;
+      return 123;
+    });
+
+    // Initial state is false in harness
+    expect((harness.bot as any).notifyOnComplete).toBe(false);
+
+    // /notify on
+    await (harness.bot as any).handleCommand('notify', 'on', harness.ctx);
+    expect((harness.bot as any).notifyOnComplete).toBe(true);
+    expect(replyText).toContain('Completion Notification: Enabled');
+
+    // /notify off
+    await (harness.bot as any).handleCommand('notify', 'off', harness.ctx);
+    expect((harness.bot as any).notifyOnComplete).toBe(false);
+    expect(replyText).toContain('Completion Notification: Disabled');
+
+    // /notify (toggle)
+    await (harness.bot as any).handleCommand('notify', '', harness.ctx);
+    expect((harness.bot as any).notifyOnComplete).toBe(true);
+    expect(replyText).toContain('Completion Notification: Enabled');
+  });
+
+  it('buildFinalReplyRender respects omitActivity option', async () => {
+    const streamResult = makeStreamResult('agy', {
+      message: 'Here is the answer.',
+      activity: 'Tool done: check status\nRan: git status',
+    });
+
+    const withActivity = buildFinalReplyRender('agy', streamResult, { omitActivity: false });
+    expect(withActivity.headerHtml).toContain('Activity');
+    expect(withActivity.fullHtml).toContain('Activity');
+    expect(withActivity.fullHtml).toContain('Here is the answer.');
+
+    const withoutActivity = buildFinalReplyRender('agy', streamResult, { omitActivity: true });
+    expect(withoutActivity.headerHtml).not.toContain('Activity');
+    expect(withoutActivity.fullHtml).not.toContain('Activity');
+    expect(withoutActivity.fullHtml).not.toContain('Tool done');
+    expect(withoutActivity.bodyHtml).toBe('Here is the answer.');
+    expect(withoutActivity.fullHtml.startsWith('Here is the answer.')).toBe(true);
   });
 });

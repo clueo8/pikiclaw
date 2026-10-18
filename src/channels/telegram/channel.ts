@@ -366,6 +366,7 @@ class TelegramChannel extends Channel {
       if (opts.parseMode) p.parse_mode = opts.parseMode;
       if (opts.replyTo != null) p.reply_to_message_id = opts.replyTo;
       if (opts.keyboard != null) p.reply_markup = opts.keyboard;
+      if (opts.disableNotification) p.disable_notification = true;
       this._applyThreadId(p, opts);
       this._logOutgoingText('sendMessage', `chat=${chatId} chunk=${index + 1}/${chunks.length}${opts.replyTo != null ? ` reply_to=${opts.replyTo}` : ''}${opts.parseMode ? ` parse=${opts.parseMode}` : ''}`, chunk);
       let res: any;

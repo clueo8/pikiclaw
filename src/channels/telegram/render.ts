@@ -442,7 +442,15 @@ export function buildStreamPreviewHtml(input: StreamPreviewRenderInput): string 
   return parts.join('\n\n');
 }
 
-export function buildFinalReplyRender(agent: Agent, result: StreamResult): FinalReplyRender {
+export interface FinalReplyRenderOptions {
+  omitActivity?: boolean;
+}
+
+export function buildFinalReplyRender(
+  agent: Agent,
+  result: StreamResult,
+  opts?: FinalReplyRenderOptions,
+): FinalReplyRender {
   const data = extractFinalReplyData(agent, result);
   const footerHtml = `\n\n${formatFinalFooterHtml(data.footerStatus, agent, data.elapsedMs, result.contextPercent ?? null, {
     model: result.model,
@@ -453,11 +461,13 @@ export function buildFinalReplyRender(agent: Agent, result: StreamResult): Final
 
   let activityHtml = '';
   let activityNoteHtml = '';
-  if (data.activityNarrative) {
-    activityHtml = `<blockquote><b>Activity</b>\n${escapeHtml(data.activityNarrative)}</blockquote>\n\n`;
-  }
-  if (data.activityCommandSummary) {
-    activityNoteHtml = `<i>${escapeHtml(data.activityCommandSummary)}</i>\n\n`;
+  if (!opts?.omitActivity) {
+    if (data.activityNarrative) {
+      activityHtml = `<blockquote><b>Activity</b>\n${escapeHtml(data.activityNarrative)}</blockquote>\n\n`;
+    }
+    if (data.activityCommandSummary) {
+      activityNoteHtml = `<i>${escapeHtml(data.activityCommandSummary)}</i>\n\n`;
+    }
   }
 
   let thinkingHtml = '';

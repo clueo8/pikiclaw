@@ -29,6 +29,7 @@ export interface SendOpts {
   keyboard?: any;
   disablePreview?: boolean;
   messageThreadId?: number;
+  disableNotification?: boolean;
 }
 
 export abstract class Channel {
