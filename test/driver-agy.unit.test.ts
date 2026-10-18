@@ -317,18 +317,23 @@ describe('Antigravity session oversized detection and compaction', () => {
     expect(isAgySessionOversized('pending_123')).toBe(false);
     expect(isAgySessionOversized('nonexistent')).toBe(false);
 
-    // 1. Oversized via SQLite DB > 3 MB
+    // 1. Oversized via SQLite DB > 15 MB
     const convDir = path.join(homeDir, '.gemini', 'antigravity-cli', 'conversations');
     fs.mkdirSync(convDir, { recursive: true });
     const largeDb = path.join(convDir, 'large-db.db');
-    fs.writeFileSync(largeDb, Buffer.alloc(3.5 * 1024 * 1024));
+    fs.writeFileSync(largeDb, Buffer.alloc(16 * 1024 * 1024));
     expect(isAgySessionOversized('large-db')).toBe(true);
 
-    // 2. Oversized via JSONL transcript > 1.5 MB
+    // Normal size SQLite DB (3.5 MB common after 1 turn of tool use)
+    const normalDb = path.join(convDir, 'normal-db.db');
+    fs.writeFileSync(normalDb, Buffer.alloc(3.5 * 1024 * 1024));
+    expect(isAgySessionOversized('normal-db')).toBe(false);
+
+    // 2. Oversized via JSONL transcript > 2.5 MB
     const brainDir = path.join(homeDir, '.gemini', 'antigravity-cli', 'brain', 'large-transcript', '.system_generated', 'logs');
     fs.mkdirSync(brainDir, { recursive: true });
     const largeTranscript = path.join(brainDir, 'transcript.jsonl');
-    fs.writeFileSync(largeTranscript, Buffer.alloc(1.6 * 1024 * 1024));
+    fs.writeFileSync(largeTranscript, Buffer.alloc(2.6 * 1024 * 1024));
     expect(isAgySessionOversized('large-transcript')).toBe(true);
 
     // 3. Normal size session
@@ -456,6 +461,36 @@ describe('Antigravity session oversized detection and compaction', () => {
 
     expect(normalizeAgent('gemini')).toBe('agy');
     expect(normalizeAgent('agy')).toBe('agy');
+  });
+
+  it('querySessionMessages strips injected envelopes from user messages', async () => {
+    const { querySessionMessages } = await import('../src/bot/session-hub.ts');
+    const brainDir = path.join(homeDir, '.gemini', 'antigravity-cli', 'brain', 'envelope-session', '.system_generated', 'logs');
+    fs.mkdirSync(brainDir, { recursive: true });
+    const transcriptPath = path.join(brainDir, 'transcript.jsonl');
+
+    const compactedPrompt = `<compacted_history agent="agy" turns="1">\nUser: prior turn\nAssistant: prior response\n</compacted_history>\n\n[Continuing this conversation from the compacted history above. The previous 1 turns have been summarized/tailed above for your context only. Do not repeat, quote, or output <compacted_history> XML tags. Your next prompt follows.]\n\nIs there a way to have a webpage display as a widget on the pixel watch?`;
+
+    const steps = [
+      { type: 'USER_INPUT', content: `<USER_REQUEST>\n${compactedPrompt}\n</USER_REQUEST>` },
+      { type: 'PLANNER_RESPONSE', content: 'Here are the options for Wear OS.' },
+    ];
+    fs.writeFileSync(transcriptPath, steps.map(s => JSON.stringify(s)).join('\n') + '\n');
+
+    const result = await querySessionMessages({
+      agent: 'agy',
+      sessionId: 'envelope-session',
+      workdir: '/tmp',
+      rich: true,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.messages[0].text).toBe('Is there a way to have a webpage display as a widget on the pixel watch?');
+    expect(result.richMessages?.[0].text).toBe('Is there a way to have a webpage display as a widget on the pixel watch?');
+    expect(result.richMessages?.[0].blocks[0].type).toBe('text');
+    if (result.richMessages?.[0].blocks[0].type === 'text') {
+      expect(result.richMessages?.[0].blocks[0].content).toBe('Is there a way to have a webpage display as a widget on the pixel watch?');
+    }
   });
 });
 

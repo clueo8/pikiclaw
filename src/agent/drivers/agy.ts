@@ -460,21 +460,21 @@ export function isAgySessionOversized(sessionId: string | null | undefined): boo
   const home = getHome();
   if (!home) return false;
 
-  // 1. Check conversation SQLite DB size (sessions > 3 MB carry excessive prompt context)
+  // 1. Check conversation SQLite DB size (massive sessions > 15 MB carry excessive prompt context)
   const convDb = path.join(home, '.gemini', 'antigravity-cli', 'conversations', `${sessionId}.db`);
   try {
     if (fs.existsSync(convDb)) {
       const stat = fs.statSync(convDb);
-      if (stat.size > 3 * 1024 * 1024) return true;
+      if (stat.size > 15 * 1024 * 1024) return true;
     }
   } catch {}
 
-  // 2. Check JSONL transcript size (> 1.5 MB transcript will exhaust per-minute tokens)
+  // 2. Check JSONL transcript size (> 2.5 MB transcript will exhaust per-minute tokens)
   const transcriptPath = findAgyTranscriptFile(sessionId);
   try {
     if (transcriptPath && fs.existsSync(transcriptPath)) {
       const stat = fs.statSync(transcriptPath);
-      if (stat.size > 1.5 * 1024 * 1024) return true;
+      if (stat.size > 2.5 * 1024 * 1024) return true;
     }
   } catch {}
 

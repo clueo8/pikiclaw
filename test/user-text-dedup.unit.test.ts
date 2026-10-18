@@ -99,7 +99,7 @@ describe('streamPromptMatchesTurnText (truncated managed-fallback dedup)', () =>
 });
 
 describe('handover prompt pending dedup', () => {
-  it('treats a handover seed plus current user prompt as one display prompt', () => {
+  it('treats a handover seed plus current user prompt as one display prompt without showing XML tags', () => {
     const prompt = 'default login 又没有了，而且左下角也没有 claude用量了，请你仔细完备修复这个问题';
     const full = [
       '<handover from="claude" to="codex" turns="9">',
@@ -112,7 +112,25 @@ describe('handover prompt pending dedup', () => {
     ].join('\n');
 
     expect(promptEndsWithUserPrompt(full, prompt)).toBe(true);
-    expect(displayPromptForPending(prompt, full)).toBe(full);
+    expect(displayPromptForPending(prompt, full)).toBe(prompt);
+    expect(displayPromptForPending(null, full)).toBe(prompt);
+  });
+
+  it('strips <compacted_history> XML envelope from pending and live questions', () => {
+    const prompt = 'Is there a way to have a webpage display as a widget on the pixel watch?';
+    const full = [
+      '<compacted_history agent="agy" turns="1">',
+      'User: On both matchup builders, for the "+ Red" and "+ Dark" buttons',
+      'Assistant: I have updated the buttons.',
+      '</compacted_history>',
+      '[Continuing this conversation from the compacted history above. The previous 1 turns have been summarized/tailed above for your context only. Do not repeat, quote, or output <compacted_history> XML tags. Your next prompt follows.]',
+      '',
+      prompt,
+    ].join('\n');
+
+    expect(promptEndsWithUserPrompt(full, prompt)).toBe(true);
+    expect(displayPromptForPending(prompt, full)).toBe(prompt);
+    expect(displayPromptForPending(null, full)).toBe(prompt);
   });
 
   it('does not merge unrelated live questions with the pending prompt', () => {

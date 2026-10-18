@@ -16,7 +16,7 @@ export function isAgySessionOversized(sessionId: string | null | undefined, home
   try {
     if (fs.existsSync(convDb)) {
       const stat = fs.statSync(convDb);
-      if (stat.size > 3 * 1024 * 1024) return true;
+      if (stat.size > 15 * 1024 * 1024) return true;
     }
   } catch {}
 
@@ -24,7 +24,7 @@ export function isAgySessionOversized(sessionId: string | null | undefined, home
   try {
     if (fs.existsSync(transcript)) {
       const stat = fs.statSync(transcript);
-      if (stat.size > 1.5 * 1024 * 1024) return true;
+      if (stat.size > 2.5 * 1024 * 1024) return true;
     }
   } catch {}
 

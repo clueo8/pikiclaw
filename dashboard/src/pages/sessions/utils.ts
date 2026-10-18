@@ -17,8 +17,52 @@ export function normalizeUserText(text: string | null | undefined): string {
   return (text || '').replace(/\s+/g, ' ').trim();
 }
 
+const COMPACTED_ENVELOPE_START_RE = /^<(?:compacted_history|handover)\b/i;
+const COMPACTED_ENVELOPE_BLOCK_RE = /^<(compacted_history|handover)\b[\s\S]*?<\/\1>\s*(?:\[Continuing this conversation[\s\S]*?\])?\s*/i;
+const CONTINUING_TRAILER_RE = /^\[Continuing this conversation[\s\S]*?\]\s*/i;
+
+export const INJECTED_PROMPT_MARKERS = [
+  '\n[Session Workspace]',
+  '\n[Telegram Artifact Return]',
+  '\n[Artifact Return]',
+];
+
+export function stripInjectedPrompts(text: string): string {
+  if (!text) return '';
+  let result = text;
+
+  while (COMPACTED_ENVELOPE_START_RE.test(result.trimStart())) {
+    const trimmed = result.trimStart();
+    const match = COMPACTED_ENVELOPE_BLOCK_RE.exec(trimmed);
+    if (match) {
+      result = trimmed.slice(match[0].length);
+    } else {
+      const trailerMatch = /\[Continuing this conversation[\s\S]*?\]\s*/i.exec(trimmed);
+      if (trailerMatch) {
+        result = trimmed.slice(trailerMatch.index + trailerMatch[0].length);
+      } else {
+        const tagClose = trimmed.indexOf('>');
+        if (tagClose >= 0) {
+          result = trimmed.slice(tagClose + 1);
+        } else {
+          break;
+        }
+      }
+    }
+  }
+
+  result = result.replace(CONTINUING_TRAILER_RE, '');
+
+  for (const m of INJECTED_PROMPT_MARKERS) {
+    const idx = result.indexOf(m);
+    if (idx >= 0) result = result.slice(0, idx).trim();
+  }
+
+  return result.trim();
+}
+
 export function sameUserText(a: string | null | undefined, b: string | null | undefined): boolean {
-  return normalizeUserText(a) === normalizeUserText(b);
+  return normalizeUserText(stripInjectedPrompts(a || '')) === normalizeUserText(stripInjectedPrompts(b || ''));
 }
 
 export function promptEndsWithUserPrompt(
@@ -34,10 +78,11 @@ export function displayPromptForPending(
   pendingPrompt: string | null | undefined,
   liveQuestion: string | null | undefined,
 ): string | null {
-  if (liveQuestion && (!pendingPrompt || promptEndsWithUserPrompt(liveQuestion, pendingPrompt))) {
-    return liveQuestion;
+  const cleanLive = liveQuestion ? stripInjectedPrompts(liveQuestion) : null;
+  if (cleanLive && (!pendingPrompt || promptEndsWithUserPrompt(liveQuestion, pendingPrompt) || sameUserText(cleanLive, pendingPrompt))) {
+    return pendingPrompt || cleanLive;
   }
-  return pendingPrompt || liveQuestion || null;
+  return pendingPrompt || cleanLive || null;
 }
 
 export function shouldCarryLatestPlanIntoLiveStream(
@@ -71,8 +116,8 @@ export function streamPromptMatchesTurnText(
   streamPrompt: string | null | undefined,
 ): boolean {
   if (sameUserText(turnText, streamPrompt)) return true;
-  const turn = normalizeUserText(turnText);
-  const prompt = normalizeUserText(streamPrompt);
+  const turn = normalizeUserText(stripInjectedPrompts(turnText || ''));
+  const prompt = normalizeUserText(stripInjectedPrompts(streamPrompt || ''));
   if (!turn || !prompt || turn.length >= prompt.length) return false;
   if (!/(?:\.\.\.|…)$/.test(turn)) return false;
   const core = turn.replace(/(?:\s*(?:\.\.\.|…))+$/, '').trim();

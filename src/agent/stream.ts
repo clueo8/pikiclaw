@@ -23,7 +23,7 @@ import type {
 import {
   Q, agentLog, agentWarn, agentError, joinErrorMessages, normalizeErrorMessage,
   buildStreamPreviewMeta, computeContext, shortValue, isPendingSessionId, dedupeStrings,
-  normalizeStreamPreviewPlan,
+  normalizeStreamPreviewPlan, stripInjectedPrompts,
 } from './utils.js';
 import {
   saveSessionRecord, setSessionRunState, applySessionRunResult,
@@ -354,7 +354,8 @@ export async function run(
 }
 
 function prepareStreamOpts(opts: StreamOpts): { prepared: StreamOpts; session: SessionWorkspaceInfo; attachments: string[]; stagedFiles: string[] } {
-  const displayPrompt = collapseSkillPrompt(opts.prompt) ?? opts.prompt;
+  const cleanPrompt = stripInjectedPrompts(opts.prompt);
+  const displayPrompt = collapseSkillPrompt(cleanPrompt) ?? cleanPrompt;
   const resolvedInboundSessionId = opts.sessionId
     ? resolveCanonicalSessionId(opts.workdir, opts.agent, opts.sessionId)
     : opts.sessionId;
@@ -408,7 +409,8 @@ function finalizeStreamResult(result: StreamResult, workdir: string, prompt: str
       : getActiveProfileId(session.record.agent);
   } catch {
   }
-  const displayPrompt = collapseSkillPrompt(prompt) ?? prompt;
+  const cleanPrompt = stripInjectedPrompts(prompt);
+  const displayPrompt = collapseSkillPrompt(cleanPrompt) ?? cleanPrompt;
   if (!session.record.title) session.record.title = summarizePromptTitle(displayPrompt);
   session.record.lastQuestion = trimSessionText(displayPrompt);
   session.record.lastAnswer = shortValue(result.message, 500);
@@ -662,7 +664,8 @@ export async function doStream(opts: StreamOpts): Promise<StreamResult> {
       byokProviderName: prepared.byokProviderName ?? null,
       byokProfileName: prepared.byokProfileName ?? null,
     };
-    const failureDisplayPrompt = collapseSkillPrompt(opts.prompt) ?? opts.prompt;
+    const cleanPrompt = stripInjectedPrompts(opts.prompt);
+    const failureDisplayPrompt = collapseSkillPrompt(cleanPrompt) ?? cleanPrompt;
     session.record.lastQuestion = trimSessionText(failureDisplayPrompt);
     session.record.lastAnswer = shortValue(failedResult.message, 500);
     session.record.lastMessageText = shortValue(failedResult.message, 500) || shortValue(failureDisplayPrompt, 500);

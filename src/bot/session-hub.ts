@@ -11,7 +11,7 @@ import {
   updateSessionMeta, resolveCanonicalSessionId, getSessionPromotions,
   deleteAgentSession as _deleteAgentSession,
   type DeleteAgentSessionOpts, type DeleteAgentSessionResult,
-  collapseSkillPrompt,
+  collapseSkillPrompt, stripInjectedPrompts,
   type Agent, type SessionInfo, type SessionListResult,
   type SessionTailResult, type SessionTailOpts,
   type SessionMessagesOpts, type SessionMessagesResult,
@@ -195,7 +195,7 @@ function managedFallbackContent(opts: SessionTailOpts): ManagedFallback | null {
   const richMessages: RichMessage[] = [];
 
   if (record.lastQuestion) {
-    const text = record.lastQuestion;
+    const text = stripInjectedPrompts(record.lastQuestion);
     messages.push({ role: 'user', text });
     const blocks: MessageBlock[] = text ? [{ type: 'text', content: text }] : [];
     blocks.push(...imageBlocksFromManagedRecord(record));
@@ -235,21 +235,23 @@ function withCanonicalSessionId<T extends { agent: Agent; sessionId: string; wor
 
 function collapseSkillPromptsInResult(result: SessionMessagesResult): SessionMessagesResult {
   if (!result.ok) return result;
+  const sanitize = (raw: string) => {
+    const stripped = stripInjectedPrompts(raw);
+    return collapseSkillPrompt(stripped) ?? stripped;
+  };
   const messages = result.messages.map(m => {
     if (m.role !== 'user') return m;
-    const collapsed = collapseSkillPrompt(m.text);
-    return collapsed ? { ...m, text: collapsed } : m;
+    const text = sanitize(m.text);
+    return { ...m, text };
   });
   const richMessages = result.richMessages?.map(m => {
     if (m.role !== 'user') return m;
-    const collapsed = collapseSkillPrompt(m.text);
-    if (!collapsed) return m;
+    const text = sanitize(m.text);
     const blocks = m.blocks.map(b => {
       if (b.type !== 'text') return b;
-      const blockCollapsed = collapseSkillPrompt(b.content);
-      return blockCollapsed ? { ...b, content: blockCollapsed } : b;
+      return { ...b, content: sanitize(b.content) };
     });
-    return { ...m, text: collapsed, blocks };
+    return { ...m, text, blocks };
   });
   return { ...result, messages, richMessages };
 }

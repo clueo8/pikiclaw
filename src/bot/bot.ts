@@ -5,6 +5,7 @@ import { getActiveUserConfig, loadWorkspaces, onUserConfigChange, resolveUserWor
 import {
   doStream, ensureManagedSession, findManagedThreadSession, getSessionStoredConfig, getUsage, initializeProjectSkills, listAgents, resolveAgentModels, resolveDefaultAgent, listSkills, stageSessionFiles,
   reconcileOrphanedRunningSessions, getAgentBoundModelId, setAgentBoundModelId, collapseSkillPrompt,
+  stripInjectedPrompts,
   normalizeAgyModelId, normalizeClaudeModelId, isAgySessionOversized,
   readGoal, accountTurn, shouldContinueAfterTurn, renderContinuationPrompt, renderBudgetLimitPrompt,
   bumpContinuationCount, pauseGoal, resumeGoal, setGoal as setGoalState, clearGoal as clearGoalState,
@@ -410,7 +411,7 @@ export class Bot {
 
   private taskPreview(taskId: string): { taskId: string; prompt: string; attachments?: MessageBlock[] } {
     const task = this.activeTasks.get(taskId) || null;
-    const raw = task?.prompt || '';
+    const raw = stripInjectedPrompts(task?.prompt || '');
     const attachments = this.taskAttachmentBlocks(task);
     return {
       taskId,
@@ -424,10 +425,11 @@ export class Bot {
     const runningTask = next.taskId ? this.activeTasks.get(next.taskId) : null;
     const runningPrompt = runningTask?.prompt || '';
     if (runningPrompt) {
+      const cleanPrompt = stripInjectedPrompts(runningPrompt);
       const questionBlocks = this.taskAttachmentBlocks(runningTask);
       next = {
         ...next,
-        question: collapseSkillPrompt(runningPrompt) ?? runningPrompt,
+        question: collapseSkillPrompt(cleanPrompt) ?? cleanPrompt,
         ...(questionBlocks.length ? { questionBlocks } : {}),
       };
     }
@@ -2391,13 +2393,17 @@ export class Bot {
           toModel: resolvedModel,
         });
         if (compResult.ok && compResult.seed) {
-          prompt = compResult.seed + '\n\n' + prompt;
-          extras?.onPreparedPrompt?.(prompt);
-          const oldSessionId = cs.sessionId;
-          cs.sessionId = null;
-          if ('activeSessionKey' in cs) cs.activeSessionKey = null;
-          if ('activeThreadId' in cs) cs.activeThreadId = null;
-          this.log(`[runStream] auto-compacted oversized session ${oldSessionId} (${compResult.messagesIncluded}/${compResult.messagesTotal} messages retained)`);
+          if (compResult.turnsTotal <= 1) {
+            this.debug(`[runStream] ${cs.agent} session ${cs.sessionId} only has ${compResult.turnsTotal} turn(s); skipping auto-compaction`);
+          } else {
+            prompt = compResult.seed + '\n\n' + prompt;
+            extras?.onPreparedPrompt?.(prompt);
+            const oldSessionId = cs.sessionId;
+            cs.sessionId = null;
+            if ('activeSessionKey' in cs) cs.activeSessionKey = null;
+            if ('activeThreadId' in cs) cs.activeThreadId = null;
+            this.log(`[runStream] auto-compacted oversized session ${oldSessionId} (${compResult.messagesIncluded}/${compResult.messagesTotal} messages retained)`);
+          }
         }
       } catch (compErr: any) {
         this.warn(`[runStream] auto-compaction failed: ${compErr?.message || compErr}`);
