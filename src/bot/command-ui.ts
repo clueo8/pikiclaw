@@ -210,8 +210,8 @@ export async function buildSessionsCommandView(
   pageSize = 5,
 ): Promise<CommandSelectionView> {
   const data = await getSessionsPageData(bot, chatId, page, pageSize);
-  const sessionButtons: CommandActionButton[][] = data.sessions.map(session => [{
-    label: `[${session.agent}] ${session.title} · ${session.time}`,
+  const sessionButtons: CommandActionButton[][] = data.sessions.map((session, index) => [{
+    label: `${index + 1}. [${session.agent}] ${session.title}`,
     action: { kind: 'session.switch', sessionId: session.key } as CommandAction,
     state: buttonStateFromFlags({ isCurrent: session.isCurrent, isRunning: session.isRunning }),
     primary: session.isCurrent,

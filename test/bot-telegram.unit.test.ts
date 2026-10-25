@@ -12,7 +12,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { TelegramBot } from '../src/channels/telegram/bot.ts';
 import { TelegramChannel } from '../src/channels/telegram/channel.ts';
-import { buildFinalReplyRender } from '../src/channels/telegram/render.ts';
+import {
+  buildFinalReplyRender,
+  renderCommandSelectionHtml,
+  renderCommandSelectionKeyboard,
+} from '../src/channels/telegram/render.ts';
 import * as agentDriver from '../src/agent/driver.ts';
 import type { Agent, StreamResult } from '../src/agent/index.ts';
 import { ensureManagedSession } from '../src/agent/index.ts';
@@ -898,5 +902,120 @@ describe('TelegramBot', () => {
     expect(withoutActivity.fullHtml).not.toContain('Tool done');
     expect(withoutActivity.bodyHtml).toBe('Here is the answer.');
     expect(withoutActivity.fullHtml.startsWith('Here is the answer.')).toBe(true);
+  });
+
+  it('renders session selection HTML with distinct indented timestamp details', () => {
+    const html = renderCommandSelectionHtml({
+      kind: 'sessions',
+      title: 'Sessions',
+      detail: 'my-project',
+      metaLines: ['3 total · p1/1'],
+      items: [
+        {
+          label: '[agy] Fix login redirect loop in authentication middleware',
+          detail: '10/25 10:48 · done',
+          state: 'current',
+        },
+        {
+          label: '[claude] Write integration tests for payment gateway',
+          detail: '10/24 18:20 · done',
+          state: 'default',
+        },
+      ],
+      rows: [],
+    });
+
+    expect(html).toContain('<b>Sessions</b>');
+    expect(html).toContain('● <b>1.</b> [agy] Fix login redirect loop in authentication middleware');
+    expect(html).toContain('<i>10/25 10:48 · done</i>');
+    expect(html).toContain('○ <b>2.</b> [claude] Write integration tests for payment gateway');
+  });
+
+  it('renders session selection keyboard with readable titles and natural end-truncation', () => {
+    const keyboard = renderCommandSelectionKeyboard({
+      kind: 'sessions',
+      title: 'Sessions',
+      metaLines: [],
+      items: [],
+      rows: [
+        [{
+          label: '1. [agy] Fix login redirect loop in authentication middleware for safari users',
+          action: { kind: 'session.switch', sessionId: 'sess-1' } as any,
+          state: 'current',
+        }],
+        [{
+          label: '2. [claude] Short task',
+          action: { kind: 'session.switch', sessionId: 'sess-2' } as any,
+          state: 'default',
+        }],
+        [
+          { label: '◀ p1', action: { kind: 'sessions.page', page: 0 } as any },
+          { label: '+ New', action: { kind: 'session.new' } as any },
+          { label: 'p2 ▶', action: { kind: 'sessions.page', page: 1 } as any },
+        ],
+      ],
+    })!;
+
+    expect(keyboard).toBeDefined();
+    const row1Button = keyboard.inline_keyboard[0][0];
+    const row2Button = keyboard.inline_keyboard[1][0];
+    const navRow = keyboard.inline_keyboard[2];
+
+    expect(row1Button.text.length).toBeLessThanOrEqual(48);
+    expect(row1Button.text.startsWith('● 1. [agy] Fix login redirect loop')).toBe(true);
+    expect(row1Button.text.endsWith('…')).toBe(true);
+    expect(row1Button.text).not.toContain('...');
+
+    expect(row2Button.text).toBe('2. [claude] Short task');
+
+    expect(navRow).toHaveLength(3);
+    expect(navRow[0].text).toBe('◀ p1');
+    expect(navRow[1].text).toBe('+ New');
+    expect(navRow[2].text).toBe('p2 ▶');
+  });
+
+  it('handles /sessions command with direct index or page argument', async () => {
+    const harness = createBot();
+    const bot = harness.bot as any;
+
+    vi.spyOn(bot, 'fetchSessions').mockResolvedValue({
+      ok: true,
+      sessions: [
+        {
+          sessionId: 'session-alpha',
+          agent: 'agy',
+          workdir: process.env.PIKILOOM_WORKDIR!,
+          title: 'First session',
+          createdAt: new Date().toISOString(),
+          running: false,
+          runState: 'completed',
+        },
+        {
+          sessionId: 'session-beta',
+          agent: 'claude',
+          workdir: process.env.PIKILOOM_WORKDIR!,
+          title: 'Second session',
+          createdAt: new Date().toISOString(),
+          running: false,
+          runState: 'completed',
+        },
+      ],
+      error: null,
+    });
+
+    let sentNotice = '';
+    harness.ctx.reply = vi.fn(async (text: string) => {
+      sentNotice = text;
+      return 123;
+    });
+
+    // /sessions 2 -> switch to session-beta
+    await bot.handleCommand('sessions', '2', harness.ctx);
+    expect(sentNotice).toContain('Session Switched');
+    expect(sentNotice).toContain('session-beta');
+
+    // /sessions 99 -> not found
+    await bot.handleCommand('sessions', '99', harness.ctx);
+    expect(sentNotice).toContain('Session #99 not found');
   });
 });

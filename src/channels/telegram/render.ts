@@ -82,9 +82,17 @@ function selectionStateSymbol(state: CommandItemState | undefined): string {
   }
 }
 
-function formatCommandItemHtml(item: CommandSelectionItem, index: number): string {
+function formatCommandItemHtml(item: CommandSelectionItem, index: number, viewKind?: string): string {
+  const symbol = selectionStateSymbol(item.state);
+  if (viewKind === 'sessions') {
+    const mainLine = `${symbol} <b>${index + 1}.</b> ${escapeHtml(item.label)}`;
+    if (item.detail) {
+      return `${mainLine}\n   <i>${escapeHtml(item.detail)}</i>`;
+    }
+    return mainLine;
+  }
   const parts = [
-    selectionStateSymbol(item.state),
+    symbol,
     `<b>${index + 1}.</b>`,
     escapeHtml(item.label),
   ];
@@ -96,7 +104,12 @@ function formatCommandButtonLabel(button: CommandActionButton, maxChars = 24): s
   const prefix = button.state && button.state !== 'default'
     ? `${selectionStateSymbol(button.state)} `
     : '';
-  return truncateMiddle(`${prefix}${button.label}`.trim(), maxChars);
+  const full = `${prefix}${button.label}`.trim();
+  if (full.length <= maxChars) return full;
+  if (full.includes(' ')) {
+    return `${full.slice(0, Math.max(1, maxChars - 1)).trimEnd()}…`;
+  }
+  return truncateMiddle(full, maxChars);
 }
 
 export function renderCommandNoticeHtml(notice: CommandNotice): string {
@@ -114,7 +127,7 @@ export function renderCommandSelectionHtml(view: CommandSelectionView): string {
   if (view.metaLines.length) lines.push(...view.metaLines.map(line => `<i>${escapeHtml(line)}</i>`));
 
   if (view.items.length) {
-    lines.push('', ...view.items.map((item, index) => formatCommandItemHtml(item, index)));
+    lines.push('', ...view.items.map((item, index) => formatCommandItemHtml(item, index, view.kind)));
   } else if (view.emptyText) {
     lines.push('', `<i>${escapeHtml(view.emptyText)}</i>`);
   }
@@ -165,10 +178,13 @@ export function unpackCallbackData(data: string): string {
 export function renderCommandSelectionKeyboard(view: CommandSelectionView): { inline_keyboard: { text: string; callback_data: string }[][] } | undefined {
   if (!view.rows.length) return undefined;
   return {
-    inline_keyboard: view.rows.map(row => row.map(button => ({
-      text: formatCommandButtonLabel(button),
-      callback_data: callbackDataRegistry.pack(encodeCommandAction(button.action)),
-    }))),
+    inline_keyboard: view.rows.map(row => {
+      const maxChars = row.length === 1 ? 48 : (row.length === 2 ? 24 : 16);
+      return row.map(button => ({
+        text: formatCommandButtonLabel(button, maxChars),
+        callback_data: callbackDataRegistry.pack(encodeCommandAction(button.action)),
+      }));
+    }),
   };
 }
 

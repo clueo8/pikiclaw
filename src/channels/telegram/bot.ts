@@ -33,6 +33,7 @@ import {
   resolveSkillPrompt,
   summarizePromptForStatus,
   handleGoalCommand,
+  getSessionsPageData,
   getSessionsDigestData,
   formatSessionsDigestText,
 } from '../../bot/commands.js';
@@ -436,7 +437,37 @@ export class TelegramBot extends Bot {
     };
   }
 
-  private async cmdSessions(ctx: TgContext) {
+  private async cmdSessions(ctx: TgContext, args = '') {
+    const arg = args.trim();
+    const pageMatch = arg.match(/^p(\d+)$/i);
+    if (pageMatch) {
+      await this.sendCommandView(
+        ctx,
+        await buildSessionsCommandView(
+          this,
+          ctx.chatId,
+          Math.max(0, parseInt(pageMatch[1], 10) - 1),
+          this.sessionsPageSize,
+        ),
+      );
+      return;
+    }
+
+    const idx = parseInt(arg, 10);
+    if (!isNaN(idx) && idx >= 1) {
+      const d = await getSessionsPageData(this, ctx.chatId, 0, 100);
+      const target = d.sessions[idx - 1];
+      if (target) {
+        await this.replyCommandResult(
+          ctx,
+          await executeCommandAction(this, ctx.chatId, { kind: 'session.switch', sessionId: target.key }),
+        );
+        return;
+      }
+      await ctx.reply(`Session #${idx} not found.`);
+      return;
+    }
+
     await this.sendCommandView(ctx, await buildSessionsCommandView(this, ctx.chatId, 0, this.sessionsPageSize));
   }
 
@@ -1293,7 +1324,7 @@ export class TelegramBot extends Bot {
         case 'new':
         case 'clear':    await this.cmdNew(ctx); return;
         case 'compact':  await this.cmdCompact(ctx); return;
-        case 'sessions': await this.cmdSessions(ctx); return;
+        case 'sessions': await this.cmdSessions(ctx, args); return;
         case 'digest': await this.cmdDigest(ctx); return;
         case 'agents':   await this.cmdAgents(ctx); return;
         case 'models':   await this.cmdModels(ctx); return;
